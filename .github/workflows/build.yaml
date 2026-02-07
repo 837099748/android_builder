@@ -13,8 +13,28 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'  # 使用 Eclipse Temurin
-          java-version: '11'  # 更新为 JDK 11
+          distribution: 'temurin'
+          java-version: '11'
+        
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # 安装你需要的 SDK 组件
+          sdkmanager: |
+            "platform-tools"
+            "platforms;android-33"
+            "build-tools;34.0.0"
+            "cmdline-tools;latest"
+          # 如果你知道你的项目需要 29.0.3，也可以这样安装
+          # sdkmanager: |
+          #   "platform-tools"
+          #   "platforms;android-29"
+          #   "build-tools;29.0.3"
+          #   "cmdline-tools;latest"
+        
+      - name: Accept Android licenses
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
         
       - id: get-project
         name: Get project name
@@ -25,6 +45,9 @@ jobs:
         
       - name: Build the app
         working-directory: ./project
+        env:
+          # 设置 Gradle 使用命令行 SDK manager
+          GRADLE_OPTS: "-Dorg.gradle.project.android.aapt2FromMavenOverride=$ANDROID_SDK_ROOT/build-tools/34.0.0/aapt2"
         run: |
           if [ ! -f "gradlew" ]; then gradle wrapper; fi
           chmod +x gradlew
