@@ -10,36 +10,17 @@ jobs:
       - name: Checkout the code
         uses: actions/checkout@v4
         
-      - name: Set up JDK 8
+      - name: Set up JDK 11
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '8'
+          java-version: '11'  # Android Gradle Plugin 7.2.2 需要 Java 11
         
-      - name: Setup Android SDK
+      - name: Install Android SDK components
         run: |
-          # 下载兼容 JDK 8 的 Android 命令行工具
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
-          mkdir -p /tmp/android-sdk
-          unzip -q cmdline-tools.zip -d /tmp/android-sdk-temp
-          
-          # 创建正确的目录结构
-          mkdir -p /tmp/android-sdk/cmdline-tools/latest
-          # 移动文件到正确位置
-          mv /tmp/android-sdk-temp/cmdline-tools/* /tmp/android-sdk/cmdline-tools/latest/
-          rm -rf /tmp/android-sdk-tools
-          
-          echo "ANDROID_SDK_ROOT=/tmp/android-sdk" >> $GITHUB_ENV
-          echo "/tmp/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          
-      - name: Accept licenses
-        run: |
-          yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-        
-      - name: Install required Android SDK components
-        run: |
-          # 安装项目需要的特定版本
-          /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-29" "build-tools;29.0.3"
+          # 使用预装的 Android SDK
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3"
         
       - id: get-project
         name: Get project name
@@ -48,9 +29,12 @@ jobs:
       - name: Clone project
         run: git clone --depth=1 ${{ steps.get-project.outputs.PROJECT }} project
         
-      - name: Configure Gradle properties
+      - name: Fix project configuration
         working-directory: ./project
         run: |
+          # 修改项目级 build.gradle 以使用 Java 11
+          sed -i 's/javaVersion = JavaVersion.VERSION_1_8/javaVersion = JavaVersion.VERSION_11/g' build.gradle
+          
           # 确保使用正确的 Gradle 版本
           echo "distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-bin.zip" > gradle/wrapper/gradle-wrapper.properties
           
