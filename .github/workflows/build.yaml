@@ -17,7 +17,7 @@ jobs:
           java-version: '11'
         
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v2.0.11
+        uses: android-actions/setup-android@v3
         
       - id: get-project
         name: Get project name
