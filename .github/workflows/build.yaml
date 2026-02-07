@@ -1,11 +1,61 @@
-- name: List project files
-        working-directory: ./project
-        run: ls -la
+name: Android Build with JDK 17
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
         
-      - name: Show gradle-wrapper.properties
-        working-directory: ./project
-        run: cat gradle/wrapper/gradle-wrapper.properties
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'none'  # 禁用缓存检测
         
-      - name: Show app/build.gradle
+      - name: Setup Android SDK using pre-installed
+        run: |
+          # 使用 GitHub Actions 预装的 Android SDK
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3"
+        
+      - id: get-project
+        name: Get project name
+        run: echo "PROJECT=$(cat project-to-build)" >> $GITHUB_OUTPUT
+        
+      - name: Clone project
+        run: git clone --depth=1 ${{ steps.get-project.outputs.PROJECT }} project
+        
+      - name: Configure Gradle for JDK 17
         working-directory: ./project
-        run: cat app/build.gradle
+        run: |
+          # 设置 Gradle 版本为 7.5.1
+          echo "distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-bin.zip" > gradle/wrapper/gradle-wrapper.properties
+          
+          # 创建或修改 gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          
+          # 更新 app/build.gradle 中的 Java 版本
+          if [ -f "app/build.gradle" ]; then
+            sed -i 's/sourceCompatibility JavaVersion.VERSION_1_8/sourceCompatibility JavaVersion.VERSION_17/g' app/build.gradle
+            sed -i 's/targetCompatibility JavaVersion.VERSION_1_8/targetCompatibility JavaVersion.VERSION_17/g' app/build.gradle
+            sed -i 's/jvmTarget = .1.8./jvmTarget = "17"/g' app/build.gradle
+          fi
+        
+      - name: Build the app
+        working-directory: ./project
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-build-apk
+          path: ./**/*.apk
