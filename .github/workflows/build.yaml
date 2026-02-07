@@ -13,8 +13,8 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'  # 添加 distribution 参数
-          java-version: '8'  # 使用字符串格式
+          distribution: 'temurin'  # 使用 Eclipse Temurin
+          java-version: '11'  # 更新为 JDK 11
         
       - id: get-project
         name: Get project name
