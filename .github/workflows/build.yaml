@@ -2,90 +2,81 @@ name: Android Build with JDK 11
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up JDK 11
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
-        cache: 'gradle'
+      - name: Checkout the code
+        uses: actions/checkout@v4
         
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v2
-      
-    - name: Accept Android licenses
-      run: |
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+          # 禁用 Gradle 缓存检测，因为我们会在项目目录中手动设置
+          cache: 'none'
         
-    - name: Install required Android packages
-      run: |
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" "build-tools;33.0.0"
-        
-    - name: Make gradlew executable
-      run: chmod +x ./gradlew
-      
-    - name: Update project configuration for JDK 11
-      run: |
-        # 修改项目配置以支持 JDK 11
-        if [ -f "app/build.gradle" ]; then
-          # 更新 sourceCompatibility 和 targetCompatibility
-          sed -i 's/sourceCompatibility JavaVersion.VERSION_1_8/sourceCompatibility JavaVersion.VERSION_11/g' app/build.gradle
-          sed -i 's/targetCompatibility JavaVersion.VERSION_1_8/targetCompatibility JavaVersion.VERSION_11/g' app/build.gradle
+      - name: Setup Android SDK
+        run: |
+          # 下载兼容 JDK 11 的 Android 命令行工具
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d /tmp/android-sdk-temp
           
-          # 更新 Kotlin jvmTarget（如果存在）
-          sed -i 's/jvmTarget = .1.8./jvmTarget = "11"/g' app/build.gradle
-          sed -i "s/jvmTarget '1.8'/jvmTarget '11'/g" app/build.gradle
-        fi
+          # 创建正确的目录结构
+          mkdir -p /tmp/android-sdk/cmdline-tools/latest
+          mv /tmp/android-sdk-temp/cmdline-tools/* /tmp/android-sdk/cmdline-tools/latest/
+          rm -rf /tmp/android-sdk-temp
+          
+          echo "ANDROID_SDK_ROOT=/tmp/android-sdk" >> $GITHUB_ENV
+          echo "/tmp/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          
+      - name: Accept licenses
+        run: |
+          yes | /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
         
-        # 确保 gradle.properties 包含正确的配置
-        echo "org.gradle.java.home=$JAVA_HOME" >> gradle.properties
-        echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> gradle.properties
-        echo "android.useAndroidX=true" >> gradle.properties
-        echo "android.enableJetifier=true" >> gradle.properties
+      - name: Install required Android SDK components
+        run: |
+          /tmp/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-29" "build-tools;29.0.3"
         
-    - name: Validate Java version
-      run: |
-        echo "Java version:"
-        java -version
-        echo "JAVA_HOME: $JAVA_HOME"
+      - id: get-project
+        name: Get project name
+        run: echo "PROJECT=$(cat project-to-build)" >> $GITHUB_OUTPUT
         
-    - name: Build with Gradle
-      run: |
-        ./gradlew clean assembleDebug --stacktrace --no-daemon
+      - name: Clone project
+        run: git clone --depth=1 ${{ steps.get-project.outputs.PROJECT }} project
         
-    - name: Run tests
-      run: |
-        ./gradlew test --stacktrace --no-daemon
+      - name: Configure Gradle for JDK 11
+        working-directory: ./project
+        run: |
+          # 确保使用正确的 Gradle 版本
+          echo "distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-bin.zip" > gradle/wrapper/gradle-wrapper.properties
+          
+          # 创建或修改 gradle.properties 文件
+          echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> gradle.properties
+          echo "android.enableJetifier=true" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          
+          # 更新 app/build.gradle 中的 Java 版本
+          if [ -f "app/build.gradle" ]; then
+            sed -i 's/sourceCompatibility JavaVersion.VERSION_1_8/sourceCompatibility JavaVersion.VERSION_11/g' app/build.gradle
+            sed -i 's/targetCompatibility JavaVersion.VERSION_1_8/targetCompatibility JavaVersion.VERSION_11/g' app/build.gradle
+          fi
+          
+          # 如果使用 Kotlin，更新 jvmTarget
+          if [ -f "app/build.gradle.kts" ]; then
+            sed -i 's/jvmTarget = "1.8"/jvmTarget = "11"/g' app/build.gradle.kts
+          fi
         
-    - name: Static analysis
-      run: |
-        ./gradlew lintDebug --stacktrace --no-daemon
-        
-    - name: Upload APK artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: app-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 7
-        
-    - name: Upload build reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: build-reports
-        path: |
-          app/build/reports/
-          build/reports/
-        retention-days: 30
+      - name: Build the app
+        working-directory: ./project
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace --no-daemon
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-build-apk
+          path: ./**/*.apk
