@@ -15,11 +15,9 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          # 完全移除 cache 参数，避免错误
         
       - name: Setup Android SDK
         run: |
-          # 使用预装的 Android SDK
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-29" "build-tools;29.0.3"
         
@@ -47,6 +45,23 @@ jobs:
             sed -i 's/targetCompatibility JavaVersion.VERSION_1_8/targetCompatibility JavaVersion.VERSION_17/g' app/build.gradle
             sed -i 's/jvmTarget = .1.8./jvmTarget = "17"/g' app/build.gradle
             sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' app/build.gradle
+          fi
+        
+      - name: Fix app build.gradle configuration
+        working-directory: ./project
+        run: |
+          if [ -f "app/build.gradle" ]; then
+            # 确保 kotlinOptions 在 android 块内
+            sed -i '/android {/,/}/ {
+                /compileOptions {/,/}/ {
+                    a\
+    kotlinOptions {\
+        jvmTarget = "17"\
+        freeCompilerArgs = ["-Xjdk-release=17"]\
+    }
+                    :insert
+                }
+            }' app/build.gradle
           fi
         
       - name: Build the app
