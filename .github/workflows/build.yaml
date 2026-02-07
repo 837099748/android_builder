@@ -14,15 +14,21 @@ jobs:
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '8'  # 项目要求 Java 8
+          java-version: '8'
         
       - name: Setup Android SDK
         run: |
           # 下载兼容 JDK 8 的 Android 命令行工具
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip -d /tmp/android-sdk
+          mkdir -p /tmp/android-sdk
+          unzip -q cmdline-tools.zip -d /tmp/android-sdk-temp
+          
+          # 创建正确的目录结构
           mkdir -p /tmp/android-sdk/cmdline-tools/latest
-          mv /tmp/android-sdk/cmdline-tools/* /tmp/android-sdk/cmdline-tools/latest/
+          # 移动文件到正确位置
+          mv /tmp/android-sdk-temp/cmdline-tools/* /tmp/android-sdk/cmdline-tools/latest/
+          rm -rf /tmp/android-sdk-tools
+          
           echo "ANDROID_SDK_ROOT=/tmp/android-sdk" >> $GITHUB_ENV
           echo "/tmp/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           
